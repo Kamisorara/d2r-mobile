@@ -1,7 +1,7 @@
 // 手柄接入（原版 Switch 本来就是手柄操作，恢复手柄支持；复用原版手柄交互，不自己设计）。
 // iOS GameController（MFi / Xbox / PS / Switch Pro）的扩展手柄 → 原版手柄输入（宿主 dm_pad_set，与触屏输入在游戏取手柄时合并）。
 // 四个面键按键帽上印的字母对应：提示条写哪个字母，就按手柄上印着那个字母的键（提示条画的是 Switch 键帽，不跟手柄型号换图）。
-//   任天堂手柄（Switch Pro、Joy-Con）与 Switch 原样一致；Xbox 手柄 = 下 A、右 B、左 X、上 Y；没有字母的（PS 等）和认不出类型的按 Xbox 的位置排（下方键 = 确认）。
+//   任天堂手柄（Switch Pro、Joy-Con）与 Switch 原样一致；Xbox / PS / MFi 手柄按位置排（Xbox 键帽 下 A、右 B、左 X、上 Y，下方键 = 确认）；认不出类型的默认按任天堂排（提示条画的就是 Switch 键帽）。
 //   规则与认手柄类型的办法在 host/dm_padmap.h（纯函数，宿主单测 t_padmap 核）；连接时记一行日志写明这个手柄用哪种排法。
 //   （先前一律按 Switch 的位置排——右键确认——Xbox 手柄玩家照提示条「A 选择」按印着 A 的下方键，实际发的是 B，选角页选不了人。）
 //   系统给的面键是按位置定的、不看键帽上的字（GCExtendedGamepad.h：buttonA 下、buttonB 右、buttonX 左、buttonY 上）；玩家在系统设置里改过键位的，系统已先换好再给我们。
@@ -24,8 +24,9 @@
 // touch input when the game reads the controller).
 // The four face buttons are mapped by the letter printed on the button glyph: whichever letter the button legend shows, press the button
 // with that letter printed on the controller (the button legend draws Switch glyphs and does not change images per controller model).
-//   Nintendo controllers (Switch Pro, Joy-Con) are identical to the Switch as is; Xbox controllers = bottom A, right B, left X, top Y;
-//   controllers with no letters (PS etc.) and unrecognized types are laid out by the Xbox positions (bottom button = confirm).
+//   Nintendo controllers (Switch Pro, Joy-Con) are identical to the Switch as is; Xbox / PS / MFi controllers are laid out by position (Xbox
+//   glyphs: bottom A, right B, left X, top Y; the bottom button = confirm); unrecognized types default to the Nintendo layout (the button
+//   legend draws Switch glyphs).
 //   The rule and the way the controller type is recognized are in host/dm_padmap.h (pure function, checked by the host unit test t_padmap);
 //   on connect one log line states which layout this controller uses.
 //   (Previously everything was laid out by the Switch positions -- right button confirms -- so an Xbox controller player following the legend
