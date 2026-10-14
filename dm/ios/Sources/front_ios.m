@@ -609,6 +609,7 @@ static BOOL touch_done(UITouch *t) { UITouchPhase ph=t.phase; return ph==UITouch
             if(_controls.navigation_mode && _controls.pointer_slot==i && _itemAsked) { _itemAsked=NO; dm_tc_pointer_item(&_controls,dm_ui_item_result(_itemSeq)); [self bindTapSync]; }   // 松手时还没告诉过：现在取（没答上 = 按别处处理） | Not yet told at release: fetch now (no answer = handle as elsewhere)
             unsigned wt=_controls.world_tap_seq;
             unsigned mc=_controls.mouse_click_seq; unsigned tt=_controls.tab_tap_seq; unsigned us=_controls.use_seq; unsigned ids=_controls.ident_seq; unsigned sts=_controls.stack_take_seq; unsigned lps=_controls.long_press_seq; unsigned its=_controls.item_tap_seq;
+            BOOL dragged=_uiDragOn && _controls.pointer_slot==i;
             if(_uiDragOn && _controls.pointer_slot==i) { _uiDragOn=NO; dm_ui_drag_end(); }
             BOOL wasPtr=_controls.pointer_slot==i; unsigned tm=_controls.tap_move_seq;
             // 按下 / 移动 / 抬起都取事件这一刻的时间（同 tick 的时钟）：面板开着时显示节拍降到 2 次 / 秒，原先取「上一拍的时刻」，0.12 秒的点按会被量成 0.5 秒、不算点按（点页签不切）
@@ -627,7 +628,12 @@ static BOOL touch_done(UITouch *t) { UITouchPhase ph=t.phase; return ph==UITouch
             if(_controls.ident_seq!=ids) dm_ui_identify_hovered();   // 物品区双击未鉴定物品 = 免费鉴定（宿主走游戏自己的鉴定函数） | Double tap on an unidentified item in the item area = free identify (the host calls the game's own identify function)
             if(_controls.use_seq!=us) dm_ui_use_item();   // 物品区双击 = 使用 / 购买 / 装备（宿主按光标下物品走原生入口） | Double tap in the item area = use / buy / equip (the host goes through the native entry for the item under the cursor)
             if(_controls.world_tap_seq!=wt && self.bounds.size.width>0) { float wx,wy; world_norm(self,_controls.world_tap_x,_controls.world_tap_y,&wx,&wy); dm_ui_world_tap((float)(_controls.world_tap_x/self.bounds.size.width),(float)(_controls.world_tap_y/self.bounds.size.height),wx,wy); }   // 游戏态点世界：点目标 = 交互，点空地不发令 | World tap in game mode: tapping a target = interact; tapping empty ground issues no command
-            if(wasPtr && _controls.navigation_mode) _tipUntil=_controls.tap_move_seq!=tm ? -1 : _controls.last_time_s+(_controls.mouse_click_seq!=mc ? 0.05 : 2.8);   // 点的是技能图标 / 属性「+」（选中待确认）：光标留在上面，原版高亮和说明框一直在，点别处 / 点另一个 / 关面板才收   // 说明框：松手后 2.8 秒自己收（游戏的说明框要点后约 0.8 秒才出来，实测；留约 2 秒看）；点的是空处 / 普通按钮 = 立即收 | Tapped a skill icon / stat "+" (selected, awaiting confirmation): the cursor stays on it and the original game's highlight and tooltip stay until tapping elsewhere / tapping another / closing the panel   // Tooltip: closes by itself 2.8 seconds after release (the game's tooltip takes about 0.8 seconds after the tap to appear, measured; leaving about 2 seconds to read); tapped empty space / an ordinary button = close immediately
+            // 单纯点了一件物品（没拖、没触发使用 / 鉴定 / 取一件 / 长按）：光标留在它上面，说明框一直在，点别处 / 点另一件 / 关面板才收——同下面的技能图标。
+            // 原先一律松手后 2.8 秒收，玩家读长说明读到一半框没了、要再点一次。拖放、使用之后光标停在落点上的那种仍按 2.8 秒收（不然放完东西说明框一直盖着）
+            // A plain tap on an item (no drag, no use / identify / take-one / long press triggered): the cursor stays on it and the description stays up until a tap elsewhere / on another item / the panel closes - same as the skill icons below.
+            // It used to be put away 2.8 seconds after release in every case, so a player reading a long description lost it halfway and had to tap again. When the cursor rests on the drop point after a drag or a use, it is still put away after 2.8 seconds (otherwise the description would keep covering things after an item is placed)
+            BOOL itemTap=_controls.item_tap_seq!=its && !dragged && _controls.use_seq==us && _controls.ident_seq==ids && _controls.stack_take_seq==sts && _controls.long_press_seq==lps && _controls.mouse_click_seq==mc;
+            if(wasPtr && _controls.navigation_mode) _tipUntil=(_controls.tap_move_seq!=tm || itemTap) ? -1 : _controls.last_time_s+(_controls.mouse_click_seq!=mc ? 0.05 : 2.8);   // 点的是技能图标 / 属性「+」（选中待确认）：光标留在上面，原版高亮和说明框一直在，点别处 / 点另一个 / 关面板才收   // 说明框：松手后 2.8 秒自己收（游戏的说明框要点后约 0.8 秒才出来，实测；留约 2 秒看）；点的是空处 / 普通按钮 = 立即收 | Tapped a skill icon / stat "+" (selected, awaiting confirmation): the cursor stays on it and the original game's highlight and tooltip stay until tapping elsewhere / tapping another / closing the panel   // Tooltip: closes by itself 2.8 seconds after release (the game's tooltip takes about 0.8 seconds after the tap to appear, measured; leaving about 2 seconds to read); tapped empty space / an ordinary button = close immediately
             if(_controls.mouse_click_seq!=mc && self.bounds.size.width>0) { float nx=_controls.mouse_click_x/self.bounds.size.width, ny=_controls.mouse_click_y/self.bounds.size.height; dm_ui_touch(0,nx,ny); dm_ui_touch(2,nx,ny); }   // 非物品区点按 = 界面鼠标点击 | Tap outside the item area = UI mouse click
             break; }
         [self recordTouch:t slot:slot phase:phase];
@@ -1055,7 +1061,7 @@ int front_text_input(const char *title, const char *sub, const char *guide, cons
                 tf.text = [tf.text substringWithRange:keep];
             }] forControlEvents:UIControlEventEditingChanged];
         }];
-        void (^finish)(int) = ^(int ok) { g_text_alert = nil; g_text_alert_finish = nil; if (ok) text = a.textFields.firstObject.text;
+        void (^finish)(int) = ^(int ok) { UIAlertController *sa = wa; g_text_alert = nil; g_text_alert_finish = nil; if (ok) text = sa.textFields.firstObject.text;   // 弱引用对话框：按钮回调 → finish → 对话框 → 按钮 是个环，对话框每弹一次留一个 | weak reference to the dialog: button callback -> finish -> dialog -> button is a cycle, leaving one dialog behind every time it is shown
             // 名字留空点确定 = 随机取名：我们自己抽一个（dm_namegen.c，约 1.8 万种、与已有角色重名就再抽），当作玩家输入的名字返回，走游戏原本的起名校验；只填进名字框不自动接受（同原版「随机名字」键，玩家看到再点创建）。
             // 原先发原版「随机名字」键，那是按职业在 12 个名字里依次轮，容易撞
             // Leaving the name empty and tapping OK = random naming: we draw one ourselves (dm_namegen.c, about 18,000 variants; redraw if it collides with an existing character), return it as the name the player typed, and go through the game's original name validation; it is only filled into the name field and not auto-accepted (same as the original game's 「随机名字」(Random Name) key: the player sees it and then taps create).
@@ -1353,6 +1359,7 @@ static void touch_script_start(void) {
         while(next<steps.count && [steps[next][0] doubleValue]<=now) {
             NSArray *f=steps[next++]; NSString *op=f.count>1?f[1]:@""; aw_on=0;
             if([op isEqualToString:@"shot"]) window_shot(f[2]);
+            else if([op isEqualToString:@"burst"] && f.count>=4) { void dm_gfx_burst(int, const char *); dm_gfx_burst([f[2] intValue], [doc stringByAppendingPathComponent:f[3]].UTF8String); LOG("[script] burst %d 帧 → %s", [f[2] intValue], [f[3] UTF8String]); }
             else if([op isEqualToString:@"tshot"]) [g_touch_view captureTouchLayer:[doc stringByAppendingPathComponent:f[2]]];   // 操作层 PNG + 控件/当前技能元数据 JSON | Control layer PNG + JSON metadata of widgets / current skills
             // type <文字>：往弹着的输入对话框里敲字——走 UITextField 的 insertText:（系统键盘上屏走的同一个入口，照样触发输入规则的拦截）；
             // alert ok|cancel：点对话框的「确定」/「取消」。两者都只在对话框弹着时有效，没弹着就记一行日志
