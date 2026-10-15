@@ -1,11 +1,10 @@
 // 手柄接入（原版 Switch 本来就是手柄操作，恢复手柄支持；复用原版手柄交互，不自己设计）。
 // iOS GameController（MFi / Xbox / PS / Switch Pro）的扩展手柄 → 原版手柄输入（宿主 dm_pad_set，与触屏输入在游戏取手柄时合并）。
-// 四个面键按键帽上印的字母对应：提示条写哪个字母，就按手柄上印着那个字母的键（提示条画的是 Switch 键帽，不跟手柄型号换图）。
-//   任天堂手柄（Switch Pro、Joy-Con）与 Switch 原样一致；Xbox / PS / MFi 手柄按位置排（Xbox 键帽 下 A、右 B、左 X、上 Y，下方键 = 确认）；认不出类型的默认按任天堂排（提示条画的就是 Switch 键帽）。
-//   规则与认手柄类型的办法在 host/dm_padmap.h（纯函数，宿主单测 t_padmap 核）；连接时记一行日志写明这个手柄用哪种排法。
-//   （先前一律按 Switch 的位置排——右键确认——Xbox 手柄玩家照提示条「A 选择」按印着 A 的下方键，实际发的是 B，选角页选不了人。）
-//   系统给的面键是按位置定的、不看键帽上的字（GCExtendedGamepad.h：buttonA 下、buttonB 右、buttonX 左、buttonY 上）；玩家在系统设置里改过键位的，系统已先换好再给我们。
-//   任天堂手柄上系统给的是不是同样按位置（印 A 的右键 = buttonB），没有实体手柄实测过，依据只有头文件的约定。
+// 四个面键按系统给的名字直接对应：buttonA/B/X/Y 就是键帽上印 A/B/X/Y 的那颗，按哪个字母发哪个字母——任何手柄都和 Switch 一个接法
+// （提示条画的是 Switch 键帽，写哪个字母按哪个字母）。键帽没字母的（PS 等）按系统安排：下方键 = buttonA = 确认。
+//   规则在 host/dm_padmap.h（纯函数，宿主单测 t_padmap 核）；连接时记一行日志。玩家在系统设置里改过键位的，系统已先换好再给我们。
+//   （实测 iPadOS 27 + Switch Pro Controller：印 A 的右键走 buttonA——系统按键帽字母给，不看位置。先前认手柄类型、按位置翻译：buttonA 当
+//     下方键，任天堂键帽再换成右 A 下 B，等于换了两次，NS 手柄也 A/B、X/Y 全反。）
 //   肩键 L/R、扳机 ZL/ZR、摇杆按下 LS/RS、十字键、菜单键→＋、选项键→－。
 //   选项键（buttonOptions）有的手柄没有，那时减号没有来源：不拿 Home 键顶（头文件：系统不吃才轮到 App，靠不住），留空。Xbox 的视图键、PS 的分享 / 创建键、Switch Pro 的 − 都是选项键。
 // 摇杆照原值换成 ±32767（GameController 与原版都是上为正）。
@@ -22,20 +21,15 @@
 // interaction is reused, nothing is designed from scratch).
 // The extended gamepad of iOS GameController (MFi / Xbox / PS / Switch Pro) -> the original controller input (host dm_pad_set, merged with
 // touch input when the game reads the controller).
-// The four face buttons are mapped by the letter printed on the button glyph: whichever letter the button legend shows, press the button
-// with that letter printed on the controller (the button legend draws Switch glyphs and does not change images per controller model).
-//   Nintendo controllers (Switch Pro, Joy-Con) are identical to the Switch as is; Xbox / PS / MFi controllers are laid out by position (Xbox
-//   glyphs: bottom A, right B, left X, top Y; the bottom button = confirm); unrecognized types default to the Nintendo layout (the button
-//   legend draws Switch glyphs).
-//   The rule and the way the controller type is recognized are in host/dm_padmap.h (pure function, checked by the host unit test t_padmap);
-//   on connect one log line states which layout this controller uses.
-//   (Previously everything was laid out by the Switch positions -- right button confirms -- so an Xbox controller player following the legend
-//   bar's "A Select" pressed the bottom button printed A, B was actually sent, and no character could be selected on the character select page.)
-//   The face buttons given by the system are defined by position, not by the letter on the glyph (GCExtendedGamepad.h: buttonA bottom,
-//   buttonB right, buttonX left, buttonY top); if the player has remapped buttons in system settings, the system has already applied that
-//   before handing them to us.
-//   Whether the system also reports Nintendo controllers by position (the right button printed A = buttonB) has not been measured on a
-//   physical controller; the only basis is the convention in the header file.
+// The four face buttons map directly by the name the system gives them: buttonA/B/X/Y are the buttons printed A/B/X/Y -- the letter pressed is
+// the letter sent -- so every controller plays like the Switch (the legend draws Switch glyphs: press whichever letter it shows).
+//   Glyphs without letters (PS etc.) follow the system's arrangement: the bottom button = buttonA = confirm. On Xbox controllers letters and
+//   positions already agree (bottom A, right B, left X, top Y).
+//   The rule is in host/dm_padmap.h (pure function, checked by the host unit test t_padmap); one log line is written on connect. If the player
+//   has remapped buttons in system settings, the system has already applied that before handing them to us.
+//   (Measured on iPadOS 27 with a Switch Pro Controller: the right button printed A arrives as buttonA -- the system hands the face buttons out
+//   by the printed glyph, not by position. The old code recognized the controller type and translated by position: buttonA taken as the bottom
+//   button, then Nintendo glyphs re-swapped to right A bottom B -- that swapped twice and flipped A/B and X/Y even on an NS pad.)
 //   Shoulder buttons L/R, triggers ZL/ZR, stick clicks LS/RS, D-pad, menu button -> +, options button -> -.
 //   Some controllers have no options button (buttonOptions), and then minus has no source: the Home button is not used as a substitute
 //   (header file: the app only gets it when the system does not consume it, which is unreliable), so it is left empty. The Xbox view button,
@@ -129,7 +123,7 @@ void dm_gamepad_drop_n(int n) { LOG("手柄：断开（虚拟手柄 %d）", n ==
 void dm_gamepad_inject(uint64_t b, int32_t lx, int32_t ly, int32_t rx, int32_t ry) { dm_gamepad_inject_n(1, b, lx, ly, rx, ry); }
 static void publish(GCController *c, GCExtendedGamepad *g) {
     uint64_t b = 0;
-    b |= dm_padmap_face(dm_padmap_kind(c.productCategory.UTF8String, c.vendorName.UTF8String), g.buttonA.pressed, g.buttonB.pressed, g.buttonX.pressed, g.buttonY.pressed);   // 按键帽上的字母（dm_padmap.h） | By the letter on the button glyph (dm_padmap.h)
+    b |= dm_padmap_face(g.buttonA.pressed, g.buttonB.pressed, g.buttonX.pressed, g.buttonY.pressed);   // 印哪个字母发哪个字母（dm_padmap.h） | The printed letter is what gets sent (dm_padmap.h)
     if (g.leftShoulder.pressed) b |= DM_BTN_L; if (g.rightShoulder.pressed) b |= DM_BTN_R; if (g.leftTrigger.pressed) b |= DM_BTN_ZL; if (g.rightTrigger.pressed) b |= DM_BTN_ZR;
     if (g.leftThumbstickButton.pressed) b |= DM_BTN_LS; if (g.rightThumbstickButton.pressed) b |= DM_BTN_RS;
     if (g.buttonMenu.pressed) b |= DM_BTN_PLUS; if (g.buttonOptions.pressed) b |= DM_BTN_MINUS;
@@ -138,7 +132,7 @@ static void publish(GCController *c, GCExtendedGamepad *g) {
 }
 static void attach(GCController *c) {
     GCExtendedGamepad *g = c.extendedGamepad; if (!g) { LOG("手柄：%s 不是扩展手柄，不接", c.vendorName.UTF8String ?: "?"); return; }
-    LOG("手柄：连上 %s，类别 %s → 面键用 %s 排法", c.vendorName.UTF8String ?: "?", c.productCategory.UTF8String ?: "?", dm_padmap_kind(c.productCategory.UTF8String, c.vendorName.UTF8String) == DM_PADKIND_NINTENDO ? "任天堂（右 A、下 B、上 X、左 Y）" : "Xbox（下 A、右 B、左 X、上 Y）");
+    LOG("手柄：连上 %s，类别 %s；面键按印的字母直接对应（印 A 发 A）", c.vendorName.UTF8String ?: "?", c.productCategory.UTF8String ?: "?");
     __weak GCController *wc = c;
     g.valueChangedHandler = ^(GCExtendedGamepad *gp, GCControllerElement *el) { (void)el; GCController *sc = wc; if (sc) publish(sc, gp); };
 }
