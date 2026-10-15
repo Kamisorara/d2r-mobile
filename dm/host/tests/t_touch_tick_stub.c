@@ -64,7 +64,7 @@ int dm_held_size(int *w, int *h) { (void)w; (void)h; return 0; }
 int dm_item_targeting(void) { return 0; }
 int dm_vendor_repair_mode(void) { return 0; }
 void dm_item_repair(uint32_t id) { (void)id; }
-void dm_belt_fill(uint64_t w) { (void)w; }
+void dm_belt_fill(void) {}
 void dm_test_identify(int what) { (void)what; }
 uint64_t dm_diag_srv_item(uint32_t id) { (void)id; return 0; }
 void dm_belt_use(int col, int row) { (void)col; (void)row; }
@@ -79,6 +79,7 @@ float dm_ui_ny(float ny) { return ny; }
 int dm_screen_real(int *w, int *h) { (void)w; (void)h; return 0; }
 void dm_uiscreen_enable(int m) { (void)m; }
 void dm_ui_rect(int *x, int *y, int *w, int *h) { *x = *y = *w = *h = 0; }
+void dm_uiscreen_set_panel(int on) { (void)on; }
 int dm_uiscreen_ingame(void) { return 0; }
 void dm_uiscreen_set_ingame(int on) { (void)on; }
 void dm_held_stow(void) {}

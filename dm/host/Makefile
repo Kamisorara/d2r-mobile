@@ -42,6 +42,7 @@ SRC=\
 	dm_pages.c \
 	dm_potpick.c \
 	dm_pouch.c \
+	dm_cloudmerge.c \
 	dm_rift.c \
 	dm_rift_ui.c \
 	dm_runeword.c \
@@ -57,6 +58,7 @@ SRC=\
 	dm_vault.c \
 	dm_vault_ui.c \
 	dm_world.c \
+	dm_prof.c \
 	thread.c \
 	touch_mac.c \
 	../ios/Sources/cloud_ios.m \
@@ -96,8 +98,8 @@ dm_bright_levels.inc: ../tools/gen_bright_levels.py ../ios/tools/touch_layout.py
 	$(NEED_ROMFS)
 	python3 ../tools/gen_bright_levels.py "$(ROMFS)" > $@.tmp && mv $@.tmp $@
 dmhost: $(SRC) $(GFX) $(LIBDEFLATE) dm.h hle.h dm_input.h front.h touch_mac.h dm_cursor.h dm_i18n_tab.h ../ios/Sources/dm_touch_controls.[ch] $(GFX_H) $(GENH)
-	clang $(CFLAGS) -I. -I../gfx/nvn/include -fobjc-arc -o $@ $(SRC) $(GFX) $(LIBDEFLATE) -framework Cocoa -framework QuartzCore -framework Metal -framework AudioToolbox -framework ImageIO -framework UniformTypeIdentifiers -framework GameController -framework Network
+	clang $(CFLAGS) -I. -I../gfx/nvn/include -fobjc-arc -o $@ $(SRC) $(GFX) $(LIBDEFLATE) -framework Cocoa -framework QuartzCore -framework Metal -framework AudioToolbox -framework CoreAudio -framework ImageIO -framework UniformTypeIdentifiers -framework GameController -framework Network
 # 老接口版宿主（图形后端不用 Metal 4，目标 macOS 15.0）：同一棵树、同一份源码，只多一个编译开关；不在缺省目标里，要用时 make dmhost_m3
 # Older-API host (graphics backend without Metal 4, target macOS 15.0): the same tree and the same source, with just one more compile switch; not in the default targets, run make dmhost_m3 when needed
 dmhost_m3: $(SRC) $(GFX) $(LIBDEFLATE) dm.h hle.h dm_input.h front.h touch_mac.h dm_cursor.h dm_i18n_tab.h ../ios/Sources/dm_touch_controls.[ch] $(GFX_H) $(GENH)
-	clang $(CFLAGS_M3) -I. -I../gfx/nvn/include -fobjc-arc -o $@ $(SRC) $(GFX) $(LIBDEFLATE) -framework Cocoa -framework QuartzCore -framework Metal -framework AudioToolbox -framework ImageIO -framework UniformTypeIdentifiers -framework GameController -framework Network
+	clang $(CFLAGS_M3) -I. -I../gfx/nvn/include -fobjc-arc -o $@ $(SRC) $(GFX) $(LIBDEFLATE) -framework Cocoa -framework QuartzCore -framework Metal -framework AudioToolbox -framework CoreAudio -framework ImageIO -framework UniformTypeIdentifiers -framework GameController -framework Network
