@@ -1,10 +1,10 @@
 // 手柄接入（原版 Switch 本来就是手柄操作，恢复手柄支持；复用原版手柄交互，不自己设计）。
 // iOS GameController（MFi / Xbox / PS / Switch Pro）的扩展手柄 → 原版手柄输入（宿主 dm_pad_set，与触屏输入在游戏取手柄时合并）。
-// 四个面键按系统给的名字直接对应：buttonA/B/X/Y 就是键帽上印 A/B/X/Y 的那颗，按哪个字母发哪个字母——任何手柄都和 Switch 一个接法
-// （提示条画的是 Switch 键帽，写哪个字母按哪个字母）。键帽没字母的（PS 等）按系统安排：下方键 = buttonA = 确认。
-//   规则在 host/dm_padmap.h（纯函数，宿主单测 t_padmap 核）；连接时记一行日志。玩家在系统设置里改过键位的，系统已先换好再给我们。
-//   （实测 iPadOS 27 + Switch Pro Controller：印 A 的右键走 buttonA——系统按键帽字母给，不看位置。先前认手柄类型、按位置翻译：buttonA 当
-//     下方键，任天堂键帽再换成右 A 下 B，等于换了两次，NS 手柄也 A/B、X/Y 全反。）
+// 四个面键按键帽上印的字母对应：提示条写哪个字母，就按手柄上印着那个字母的键（提示条画的是 Switch 键帽，不跟手柄型号换图）。
+//   系统给的 buttonA/B/X/Y 直接发游戏的 A/B/X/Y，不认手柄类型：系统对任天堂手柄按键帽字母给（印 A 的右键 = buttonA），Xbox 字母与位置一致，
+//   没字母的（PS 等）按菱形位置给（下方键 = buttonA = 确认）。规则在 host/dm_padmap.h（纯函数，宿主单测 t_padmap 核）；连接时记一行厂商名与产品类别。
+//   （先前一律按 Switch 的位置排——右键确认——Xbox 手柄玩家照提示条「A 选择」按印着 A 的下方键，实际发的是 B，选角页选不了人。）
+//   （之后按 GCExtendedGamepad.h 的菱形约定认类型再翻译：任天堂手柄被换了两次，A/B、X/Y 全反——公开 日志。）玩家在系统设置里改过键位的，系统已先换好再给我们。
 //   肩键 L/R、扳机 ZL/ZR、摇杆按下 LS/RS、十字键、菜单键→＋、选项键→－。
 //   选项键（buttonOptions）有的手柄没有，那时减号没有来源：不拿 Home 键顶（头文件：系统不吃才轮到 App，靠不住），留空。Xbox 的视图键、PS 的分享 / 创建键、Switch Pro 的 − 都是选项键。
 // 摇杆照原值换成 ±32767（GameController 与原版都是上为正）。
@@ -17,40 +17,24 @@
 //   · 游戏取手柄处（hle_hid.c fill）：触屏摇杆有值就用触屏的，否则用手柄的。
 // 多个手柄：每个手柄各存各的键和摇杆，交给游戏的是合起来的——键取或、每根摇杆取推得最远的那个。断开一个只拿掉它那一份，别的手柄按着的键不丢。
 // 失活 / 进后台 / 来电（前端 front_ios_focus_event → dm_gamepad_reset）：所有手柄的键和摇杆清零。回调只在值变化时来，按着键切走、在后台松开，回来不会补一次「松开」。
-// Controller support (the original Switch game is controller-driven to begin with, so controller support is restored; the original controller
-// interaction is reused, nothing is designed from scratch).
-// The extended gamepad of iOS GameController (MFi / Xbox / PS / Switch Pro) -> the original controller input (host dm_pad_set, merged with
-// touch input when the game reads the controller).
-// The four face buttons map directly by the name the system gives them: buttonA/B/X/Y are the buttons printed A/B/X/Y -- the letter pressed is
-// the letter sent -- so every controller plays like the Switch (the legend draws Switch glyphs: press whichever letter it shows).
-//   Glyphs without letters (PS etc.) follow the system's arrangement: the bottom button = buttonA = confirm. On Xbox controllers letters and
-//   positions already agree (bottom A, right B, left X, top Y).
-//   The rule is in host/dm_padmap.h (pure function, checked by the host unit test t_padmap); one log line is written on connect. If the player
-//   has remapped buttons in system settings, the system has already applied that before handing them to us.
-//   (Measured on iPadOS 27 with a Switch Pro Controller: the right button printed A arrives as buttonA -- the system hands the face buttons out
-//   by the printed glyph, not by position. The old code recognized the controller type and translated by position: buttonA taken as the bottom
-//   button, then Nintendo glyphs re-swapped to right A bottom B -- that swapped twice and flipped A/B and X/Y even on an NS pad.)
-//   Shoulder buttons L/R, triggers ZL/ZR, stick clicks LS/RS, D-pad, menu button -> +, options button -> -.
-//   Some controllers have no options button (buttonOptions), and then minus has no source: the Home button is not used as a substitute
-//   (header file: the app only gets it when the system does not consume it, which is unreliable), so it is left empty. The Xbox view button,
-//   the PS share / create button and the Switch Pro - button are all the options button.
-// Sticks are converted from their raw values to +/-32767 (up is positive in both GameController and the original game).
-// Who takes over (whoever has explicit input takes over; no flipping back and forth because of drift):
-//   - Controller "explicit input" = pressing any button, or pushing a stick out of center. Sticks have hysteresis: only past 25% counts as
-//     pushed out, and only back within 15% counts as centered -- drift sitting near the threshold does not count one moment and not the next.
-//   - The controller has explicit input -> controller mode (the layout switches to the original controller layout); touching the screen ->
-//     touch mode (the front end calls dm_gamepad_touched).
-//   - After the screen has been touched, a stick must return to center and then be pushed out before it takes over again: a stick that stays
-//     deflected (a controller with heavy drift) will not flip the layout back to the controller layout. Buttons take over at any time.
-//   - In touch mode the controller stick values are not handed to the game (a connected controller lying aside with slight stick drift
-//     should not override the touch stick); in controller mode a stick that is not pushed out gives 0 and one that is pushed out gives the
-//     raw value.
-//   - Where the game reads the controller (hle_hid.c fill): if the touch stick has a value the touch one is used, otherwise the controller's.
-// Multiple controllers: each controller keeps its own buttons and sticks, and what the game gets is the combination -- buttons are ORed, and
-// for each stick the one pushed furthest wins. Disconnecting one removes only its share; buttons held on other controllers are not lost.
-// Resign active / entering background / incoming call (front end front_ios_focus_event -> dm_gamepad_reset): buttons and sticks of all
-// controllers are zeroed. Callbacks only arrive when a value changes, so after switching away with a button held and releasing it in the
-// background, no "release" is delivered on return.
+// Controller support (the original Switch game is played with a controller, so controller support is restored, reusing the original controller interaction rather than designing our own).
+// iOS GameController extended gamepads (MFi / Xbox / PS / Switch Pro) → original controller input (host dm_pad_set, merged with touch input when the game reads the controller).
+// The four face buttons follow the letters printed on the keycaps: whatever letter the prompt shows, press the button printed with that letter (the prompt draws Switch keycaps and does not change with the controller model).
+//   The system's buttonA/B/X/Y are sent directly as the game's A/B/X/Y regardless of controller type: the system reports Nintendo controllers by keycap letter (the right button printed A = buttonA), Xbox letters match positions,
+//   and controllers without letters (PS etc.) by diamond position (bottom button = buttonA = confirm). The rule lives in host/dm_padmap.h (pure function, checked by the host unit test t_padmap); the vendor name and product category are logged on connect.
+//   (Previously everything followed the Switch layout — right button confirms — so Xbox players pressing the bottom button printed A per the prompt "A Select" actually sent B and could not pick a character.)
+//   (Later the type was recognized and translated per the diamond convention in GCExtendedGamepad.h: Nintendo controllers were swapped twice and A/B, X/Y were all reversed — a public log.) If the player remapped buttons in system settings, the system has already applied that before reporting.
+//   Shoulders L/R, triggers ZL/ZR, stick presses LS/RS, D-pad, menu button → +, options button → −.
+//   Some controllers have no options button (buttonOptions); then minus has no source: the Home button is not used as a substitute (per the header the app only gets it when the system does not take it, which is unreliable), so it stays empty. Xbox's View, PS's Share / Create and Switch Pro's − are all the options button.
+// Stick values are scaled to ±32767 unchanged (GameController and the original both use up = positive).
+// Who takes over (whoever gives explicit input takes over; drift does not toggle it back and forth):
+//   · Explicit controller input = pressing any button, or pushing a stick out of the center. The stick has hysteresis: it counts as pushed past 25% and as centered again within 15% — drift around the threshold does not flicker.
+//   · Explicit controller input → controller mode (layout switches to the original controller version); touching the screen → touch mode (the front end calls dm_gamepad_touched).
+//   · After the screen has been touched, a stick must return to center and be pushed out again to take over: a stick that stays off center (a controller with large drift) does not switch the layout back. Buttons take over at any time.
+//   · In touch mode the controller stick values are not passed to the game (a connected controller lying aside with a slightly drifting stick must not override the touch stick); in controller mode an unpushed stick gives 0 and a pushed one its value.
+//   · Where the game reads the controller (hle_hid.c fill): the touch stick is used when it has a value, otherwise the controller's.
+// Multiple controllers: each keeps its own buttons and sticks, and the game gets the combination — buttons ORed, each stick taking whichever is pushed farthest. Disconnecting one removes only its share; buttons held on other controllers are not dropped.
+// Resign active / background / incoming call (front end front_ios_focus_event → dm_gamepad_reset): all controllers' buttons and sticks are cleared. Callbacks arrive only on value changes, so a button held while switching away and released in the background would never get a release when coming back.
 #import <GameController/GameController.h>
 #include "dm_input.h"
 #include "dm_padmap.h"
@@ -123,7 +107,7 @@ void dm_gamepad_drop_n(int n) { LOG("手柄：断开（虚拟手柄 %d）", n ==
 void dm_gamepad_inject(uint64_t b, int32_t lx, int32_t ly, int32_t rx, int32_t ry) { dm_gamepad_inject_n(1, b, lx, ly, rx, ry); }
 static void publish(GCController *c, GCExtendedGamepad *g) {
     uint64_t b = 0;
-    b |= dm_padmap_face(g.buttonA.pressed, g.buttonB.pressed, g.buttonX.pressed, g.buttonY.pressed);   // 印哪个字母发哪个字母（dm_padmap.h） | The printed letter is what gets sent (dm_padmap.h)
+    b |= dm_padmap_face(g.buttonA.pressed, g.buttonB.pressed, g.buttonX.pressed, g.buttonY.pressed);   // 系统给哪个字母发哪个字母（dm_padmap.h） | Send whichever letter the system reports (dm_padmap.h)
     if (g.leftShoulder.pressed) b |= DM_BTN_L; if (g.rightShoulder.pressed) b |= DM_BTN_R; if (g.leftTrigger.pressed) b |= DM_BTN_ZL; if (g.rightTrigger.pressed) b |= DM_BTN_ZR;
     if (g.leftThumbstickButton.pressed) b |= DM_BTN_LS; if (g.rightThumbstickButton.pressed) b |= DM_BTN_RS;
     if (g.buttonMenu.pressed) b |= DM_BTN_PLUS; if (g.buttonOptions.pressed) b |= DM_BTN_MINUS;
@@ -132,7 +116,7 @@ static void publish(GCController *c, GCExtendedGamepad *g) {
 }
 static void attach(GCController *c) {
     GCExtendedGamepad *g = c.extendedGamepad; if (!g) { LOG("手柄：%s 不是扩展手柄，不接", c.vendorName.UTF8String ?: "?"); return; }
-    LOG("手柄：连上 %s，类别 %s；面键按印的字母直接对应（印 A 发 A）", c.vendorName.UTF8String ?: "?", c.productCategory.UTF8String ?: "?");
+    LOG("手柄：连上 %s，类别 %s → 面键 buttonA/B/X/Y 直接发 A/B/X/Y", c.vendorName.UTF8String ?: "?", c.productCategory.UTF8String ?: "?");
     __weak GCController *wc = c;
     g.valueChangedHandler = ^(GCExtendedGamepad *gp, GCControllerElement *el) { (void)el; GCController *sc = wc; if (sc) publish(sc, gp); };
 }
